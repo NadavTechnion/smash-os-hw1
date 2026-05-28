@@ -96,12 +96,15 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     if (firstWord.compare("chprompt") == 0) {
       return new ChpromptCommand(cmd_line);
     }
-    // else if (firstWord.compare("showpid") == 0) {
-    //   return new ShowPidCommand(cmd_line);
-    // }
-    // else if (firstWord.compare("pwd") == 0) {
-    //   return new GetCurrDirCommand(cmd_line);
-    // }
+    else if (firstWord.compare("showpid") == 0) {
+      return new ShowPidCommand(cmd_line);
+    }
+    else if (firstWord.compare("pwd") == 0) {
+      return new GetCurrDirCommand(cmd_line);
+    }
+    else if (firstWord.compare("cd") == 0) {
+      return new GetCurrDirCommand(cmd_line);
+    }
     // else {
     //   return new ExternalCommand(cmd_line);
     // }
@@ -127,12 +130,30 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // Please note that you must fork smash process for some commands (e.g., external commands....)
     
     Command* cmd = CreateCommand(cmd_line);
-    
+
     if (cmd != nullptr) {
         cmd->execute();
         delete cmd; 
     }
 
+}
+ShowPidCommand::ShowPidCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void ShowPidCommand::execute() {
+    std::cout << "smash pid is " << getpid() << std::endl;
+}
+
+GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void GetCurrDirCommand::execute() {
+    char* buf = getcwd(nullptr, 0); 
+    
+    if (buf != nullptr) {
+        cout << buf << endl;
+        free(buf); 
+    } else {
+        perror("smash error: getcwd failed");
+    }
 }
 
 void ChpromptCommand::execute() {

@@ -106,8 +106,7 @@ class ChpromptCommand : public BuiltInCommand{
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
-    ChangeDirCommand(const char *cmd_line, char **plastPwd);
-
+    ChangeDirCommand(const char *cmd_line);
     virtual ~ChangeDirCommand() {
     }
 
@@ -254,6 +253,8 @@ class SmallShell {
 private:
     // TODO: Add your data members
     std::string name;
+    std::string lastPwd;
+
     SmallShell();
 
 public:
@@ -281,7 +282,8 @@ public:
 
     void executeCommand(const char *cmd_line);
 
-    // TODO: add extra methods as needed
+    std::string getLastPwd() { return lastPwd; }
+    void setLastPwd(const std::string& pwd) { lastPwd = pwd; }
 };
 
 #endif //SMASH_COMMAND_H_

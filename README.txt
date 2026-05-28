@@ -49,4 +49,4 @@ We recommend that you start your implementation with:
 - Finally, implement the rest of commands, followed by the bonus part and pipes.
 
 
-Good luck :)
+Good luck :
