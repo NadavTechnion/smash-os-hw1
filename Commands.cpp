@@ -103,7 +103,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
       return new GetCurrDirCommand(cmd_line);
     }
     else if (firstWord.compare("cd") == 0) {
-      return new GetCurrDirCommand(cmd_line);
+      return new ChangeDirCommand(cmd_line);
     }
     // else {
     //   return new ExternalCommand(cmd_line);
@@ -145,14 +145,61 @@ void ShowPidCommand::execute() {
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
 
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
 void GetCurrDirCommand::execute() {
     char* buf = getcwd(nullptr, 0); 
-    
     if (buf != nullptr) {
-        cout << buf << endl;
+        std::cout << buf << std::endl;
         free(buf); 
     } else {
         perror("smash error: getcwd failed");
+    }
+}
+
+
+void ChangeDirCommand::execute() {
+    char* args[COMMAND_MAX_ARGS];
+    int num_args = _parseCommandLine(cmd_line.c_str(), args);
+
+    SmallShell& smash = SmallShell::getInstance();
+
+    // too many args
+    if (num_args > 2) {
+        std::cerr << "smash error: cd: too many arguments\n";
+    } 
+    else if (num_args == 2) {
+        std::string target_path = args[1];
+        
+        // "cd -" but no previous directory is set
+        if (target_path == "-") {
+            if (smash.getLastPwd().empty()) {
+                std::cerr << "smash error: cd: OLDPWD not set\n";
+                
+                for (int i = 0; i < num_args; i++) free(args[i]);
+                return; 
+            } else {
+                //  a prev path exists
+                target_path = smash.getLastPwd();
+            }
+        }
+
+        char* current_dir_buf = getcwd(nullptr, 0);
+        std::string current_dir = (current_dir_buf != nullptr) ? std::string(current_dir_buf) : "";
+        if (current_dir_buf) free(current_dir_buf);
+
+        // ERROR CASE 3: chdir system call fails
+        if (chdir(target_path.c_str()) == -1) {
+            perror("smash error: chdir failed");
+        } else {
+            // Update the the last directory
+            smash.setLastPwd(current_dir);
+        }
+    }
+
+    // Clean up parsed arguments
+    for (int i = 0; i < num_args; i++) {
+        free(args[i]);
     }
 }
 
