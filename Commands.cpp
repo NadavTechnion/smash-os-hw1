@@ -136,7 +136,7 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {}
 ExternalCommand::ExternalCommand(const char *cmd_line, int p_id) : Command(cmd_line), p_id(p_id) {}
 
 void ExternalCommand::execute() {
-    SmallShell& smash = SmallShell::getInstance();
+    JobsList& jobManager = SmallShell::getInstance().getJobManager();
     bool is_bg = _isBackgroundComamnd(cmd_line.c_str());
     bool is_complex = cmd_line.find('*') != string::npos || cmd_line.find('?') != string::npos;
     char command_line[COMMAND_MAX_LENGTH+1];
@@ -167,7 +167,7 @@ void ExternalCommand::execute() {
             waitpid(pid, nullptr, WUNTRACED);
         }
         else {
-            smash.getJobManager().addJob(this);
+            jobManager.addJob(this);
         }
     }
 }
@@ -245,7 +245,7 @@ void QuitCommand::execute() {
     char* args[COMMAND_MAX_ARGS];
     int num_args = _parseCommandLine(cmd_line.c_str(), args);
     bool is_kill = num_args > 1 && string(args[1]) == "kill";
-    JobsList jobManager = SmallShell::getInstance().getJobManager();
+    JobsList& jobManager = SmallShell::getInstance().getJobManager();
     if(is_kill) {
         cout << "smash: sending SIGKILL signal to " << jobManager.size() << " jobs:" << endl;
         jobManager.killAllJobs();
@@ -254,7 +254,8 @@ void QuitCommand::execute() {
 }
 
 void JobsCommand::execute() {
-    SmallShell::getInstance().getJobManager().printJobs();
+    JobsList& jobManager = SmallShell::getInstance().getJobManager();
+    jobManager.printJobs();
 }
 
 KillCommand::KillCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
@@ -262,7 +263,7 @@ KillCommand::KillCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
 void KillCommand::execute() {
     char* args[COMMAND_MAX_ARGS];
     int num_args = _parseCommandLine(cmd_line.c_str(), args);
-    JobsList jobManager = SmallShell::getInstance().getJobManager();
+    JobsList& jobManager = SmallShell::getInstance().getJobManager();
     if (num_args != 3) {
         cerr << "smash error: kill: invalid arguments" << endl;
     }
@@ -273,7 +274,7 @@ void KillCommand::execute() {
             JobsList::JobEntry* job = jobManager.getJobById(jobId);
             if (job != nullptr) {
                 cout << "signal number " << sigNum << " was sent to pid" <<job-> getPid() << endl;
-                jobManager.removeJobById(jobId);
+                kill(job->getPid(), sigNum);
             }
             else {
                 cerr << "smash error: kill: job-id <"<< jobId << "> does not exist" << endl;
@@ -295,7 +296,7 @@ void ForegroundCommand::execute() {
     int jobId = 0;
     char* args[COMMAND_MAX_ARGS];
     int num_args = _parseCommandLine(cmd_line.c_str(), args);
-    SmallShell& smash = SmallShell::getInstance();
+    JobsList& jobManager = SmallShell::getInstance().getJobManager();
     if (num_args > 2) {
         std::cerr << "smash error: fg: invalid arguments" << std::endl;
         return;
@@ -306,26 +307,26 @@ void ForegroundCommand::execute() {
                 std::cerr << "smash error: fg: invalid arguments" << std::endl;
                 return;
             }
-                jobId+= c - '0'; }
-
-        JobsList::JobEntry* job = smash.getJobManager().getJobById(jobId);
+            jobId = jobId * 10 + (c - '0');
+        }
+        JobsList::JobEntry* job = jobManager.getJobById(jobId);
         if(job == nullptr) {
             std::cerr << "smash error: fg: job-id <" << jobId << "> does not exist" << std::endl;
             return;
         }
-        cout << job ->getCmdLine() <<" " << job->getPid() << endl;
+        cout << job->getCmdLine() << " " << job->getPid() << endl;
         waitpid(job->getPid(), nullptr, WUNTRACED);
-        smash.getJobManager().removeJobById(jobId);
+        jobManager.removeJobById(jobId);
     }
     else {
-        if(smash.getJobManager().size() == 0) {
-            std::cerr << "smash error: fg: jobs list is empty"<< std::endl;
+        if(jobManager.size() == 0) {
+            std::cerr << "smash error: fg: jobs list is empty" << std::endl;
             return;
         }
-         JobsList::JobEntry * firstJob = smash.getJobManager().getFirstJob();
-        cout <<firstJob->getCmdLine() <<" " << firstJob->getPid() << endl;
+        JobsList::JobEntry* firstJob = jobManager.getFirstJob();
+        cout << firstJob->getCmdLine() << " " << firstJob->getPid() << endl;
         waitpid(firstJob->getPid(), nullptr, WUNTRACED);
-        smash.getJobManager().removeJobById(firstJob->getJobId());
+        jobManager.removeJobById(firstJob->getJobId());
     }
 }
 
