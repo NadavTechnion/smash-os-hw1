@@ -11,7 +11,9 @@ protected:
 
 public:
     Command(const char *cmd_line);
-
+    std::string getCmdLine() {
+        return cmd_line;
+    }
     virtual ~Command();
 
     virtual void execute() = 0;
@@ -33,9 +35,12 @@ public:
 };
 
 class ExternalCommand : public Command {
+    int p_id;
 public:
-    ExternalCommand(const char *cmd_line);
-
+    ExternalCommand(const char *cmd_line,int p_id);
+    int getPid() const {
+        return p_id;
+    }
     virtual ~ExternalCommand() {
     }
 
@@ -106,8 +111,6 @@ class ChpromptCommand : public BuiltInCommand{
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
-    public:
-    
     ChangeDirCommand(const char *cmd_line);
     virtual ~ChangeDirCommand() {
     }
@@ -146,12 +149,24 @@ class QuitCommand : public BuiltInCommand {
 
     void execute() override;
 };
-
 class JobsList {
 public:
     class JobEntry {
-        // TODO: Add your data members
+    int job_id;
+    int p_id;
+    std::string cmd_line;
+    bool is_stopped;
+    public:
+        JobEntry(int job_id , int p_id,std::string cmd_line , bool is_stopped):
+        job_id(job_id) , p_id(p_id),cmd_line(cmd_line),is_stopped(is_stopped){}
+        ~JobEntry(){}
+        int getJobId() const { return job_id; }
+        int getPid() const { return p_id; }
+        std::string getCmdLine() const { return cmd_line; }
+        bool getIsStopped() const { return is_stopped; }
     };
+private:
+    std::vector<JobEntry> jobs;
 
     // TODO: Add your data members
 public:
@@ -254,6 +269,7 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
+    JobsList jobs;
     std::string name;
     std::string lastPwd;
 
