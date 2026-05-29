@@ -36,6 +36,7 @@ public:
 
 class ExternalCommand : public Command {
     int p_id;
+
 public:
     ExternalCommand(const char *cmd_line,int p_id);
     int getPid() const {
@@ -111,6 +112,7 @@ class ChpromptCommand : public BuiltInCommand{
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
+public:
     ChangeDirCommand(const char *cmd_line);
     virtual ~ChangeDirCommand() {
     }
@@ -281,7 +283,7 @@ public:
     std::string getName(){
         return name;
     }
-
+    JobsList& getJobs() { return jobs; }
     void setName(const std::string n){
         name = n;
     }

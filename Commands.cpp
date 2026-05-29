@@ -105,9 +105,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("cd") == 0) {
       return new ChangeDirCommand(cmd_line);
     }
-    // else {
-    //   return new ExternalCommand(cmd_line);
-    // }
+    else {
+       return new ExternalCommand(cmd_line,0);
+     }
     
 
 
@@ -124,44 +124,48 @@ ExternalCommand::ExternalCommand(const char *cmd_line, int p_id) : Command(cmd_l
 
 void ExternalCommand::execute() {
 
-}
-
-/*
-void ExternalCommand::execute() {
-    bool is_bg = _isBackgroundComamnd(cmd_line.c_str());
+    SmallShell& smash = SmallShell::getInstance();
+    bool is_bg =  _isBackgroundComamnd(cmd_line.c_str());
     bool is_complex = cmd_line.find('*') != string::npos || cmd_line.find('?') != string::npos;
+    char command_line[COMMAND_MAX_LENGTH+1];
 
-    char cmd_copy[COMMAND_MAX_LENGTH + 1];
-    strncpy(cmd_copy, cmd_line.c_str(), COMMAND_MAX_LENGTH);
-    cmd_copy[COMMAND_MAX_LENGTH] = '\0';
-    _removeBackgroundSign(cmd_copy);
-
-    pid_t pid = fork();
-    if (pid == -1) {
+    strncpy(command_line , cmd_line.c_str(), COMMAND_MAX_LENGTH);
+    _removeBackgroundSign(command_line);
+    int pid = fork();
+    if(pid == -1) {
         perror("smash error: fork failed");
         return;
     }
-    if (pid == 0) {
-        // child
+    //child
+    if(pid == 0) {
         setpgrp();
-        if (is_complex) {
-            execl("/bin/bash", "bash", "-c", cmd_copy, NULL);
-        } else {
-            char* args[COMMAND_MAX_ARGS + 1];
-            _parseCommandLine(cmd_copy, args);
+        if(is_complex) {
+            execl("/bin/bash","bash", "-c", command_line, NULL);
+        }
+        else {
+            char* args[COMMAND_MAX_ARGS+1];
+            _parseCommandLine(command_line,args);
             execvp(args[0], args);
         }
         perror("smash error: exec failed");
         exit(1);
-    } else {
-        // parent
+    }
+    else{
         p_id = pid;
-        if (!is_bg) {
-            waitpid(pid, nullptr, 0);
+        if(!is_bg) {
+            waitpid(pid,nullptr,WUNTRACED);
+        }
+        else {
+            smash.getJobs().addJob(this);
         }
     }
+
 }
-*/
+
+
+
+
+
 
 JobsList::JobsList() {}
 JobsList::~JobsList() {}
@@ -173,11 +177,6 @@ void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line);
     if(cmd == nullptr) return;
     cmd->execute();
-    if(dynamic_cast<ExternalCommand*>(cmd) != nullptr) {
-        if(_isBackgroundComamnd(cmd_line)) {
-            jobs.addJob(cmd);
-        }
-    }
     delete cmd;
 }
 
@@ -249,7 +248,7 @@ void ChangeDirCommand::execute() {
 }
 void JobsList::addJob(Command *cmd, bool isStopped) {
     if (ExternalCommand* ext = dynamic_cast<ExternalCommand*>(cmd)) {
-        int new_id = 1;
+        int new_id = 0;
         for (auto& j : jobs) {
             if (j.getJobId() >= new_id) new_id = j.getJobId();
         }
