@@ -198,6 +198,10 @@ public:
 
     JobEntry *getFirstJob();
 
+    JobEntry *getLastJob();
+
+    void printAndKillAllJobs();
+
     int size();
 
     void removeJobById(int jobId);

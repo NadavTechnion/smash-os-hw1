@@ -248,7 +248,7 @@ void QuitCommand::execute() {
     JobsList& jobManager = SmallShell::getInstance().getJobManager();
     if(is_kill) {
         cout << "smash: sending SIGKILL signal to " << jobManager.size() << " jobs:" << endl;
-        jobManager.killAllJobs();
+        jobManager.printAndKillAllJobs();
     }
     exit(0);
 }
@@ -273,7 +273,7 @@ void KillCommand::execute() {
             int jobId = atoi(args[2]);
             JobsList::JobEntry* job = jobManager.getJobById(jobId);
             if (job != nullptr) {
-                cout << "signal number " << sigNum << " was sent to pid" <<job-> getPid() << endl;
+                cout << "signal number " << sigNum << " was sent to pid " << job->getPid() << endl;
                 kill(job->getPid(), sigNum);
             }
             else {
@@ -314,7 +314,8 @@ void ForegroundCommand::execute() {
             std::cerr << "smash error: fg: job-id <" << jobId << "> does not exist" << std::endl;
             return;
         }
-        cout << job->getCmdLine() << " " << job->getPid() << endl;
+        cout << job->getCmdLine() << " : " << job->getPid() << endl;
+        if (job->getIsStopped()) kill(job->getPid(), SIGCONT);
         waitpid(job->getPid(), nullptr, WUNTRACED);
         jobManager.removeJobById(jobId);
     }
@@ -323,10 +324,12 @@ void ForegroundCommand::execute() {
             std::cerr << "smash error: fg: jobs list is empty" << std::endl;
             return;
         }
-        JobsList::JobEntry* firstJob = jobManager.getFirstJob();
-        cout << firstJob->getCmdLine() << " " << firstJob->getPid() << endl;
-        waitpid(firstJob->getPid(), nullptr, WUNTRACED);
-        jobManager.removeJobById(firstJob->getJobId());
+        JobsList::JobEntry* lastJob = jobManager.getLastJob();
+        cout << lastJob->getCmdLine() << " : " << lastJob->getPid() << endl;
+        if (lastJob->getIsStopped()) kill(lastJob->getPid(), SIGCONT);
+        int lastJobId = lastJob->getJobId();
+        waitpid(lastJob->getPid(), nullptr, WUNTRACED);
+        jobManager.removeJobById(lastJobId);
     }
 }
 
@@ -369,6 +372,19 @@ void JobsList::printJobs() {
 JobsList::JobEntry* JobsList::getFirstJob() {
     if (jobs.empty()) return nullptr;
     return &jobs.begin()->second;
+}
+
+JobsList::JobEntry* JobsList::getLastJob() {
+    if (jobs.empty()) return nullptr;
+    return &jobs.rbegin()->second;
+}
+
+void JobsList::printAndKillAllJobs() {
+    for (auto& pair : jobs) {
+        cout << pair.second.getPid() << ": " << pair.second.getCmdLine() << endl;
+        kill(pair.second.getPid(), SIGKILL);
+    }
+    jobs.clear();
 }
 
 JobsList::JobEntry* JobsList::getJobById(int jobId) {
