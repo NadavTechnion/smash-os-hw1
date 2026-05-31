@@ -265,6 +265,8 @@ public:
 };
 
 class UnSetEnvCommand : public BuiltInCommand {
+    bool isEnvExistsInProc(const std::string& var_name);
+    void removeEnvFromGlobalArray(const std::string& var_name);
 public:
     UnSetEnvCommand(const char *cmd_line);
 

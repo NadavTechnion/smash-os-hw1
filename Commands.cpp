@@ -10,6 +10,10 @@
 using namespace std;
 #include <fstream>
 extern char **environ;
+#include <unistd.h>
+
+// המערך הגלובלי שלינוקס שומר בו את משתני הסביבה - בדיוק כפי שה-PDF דורש
+extern char **__environ;
 
 
 const std::string WHITESPACE = " \n\r\t\f\v";
@@ -418,12 +422,7 @@ JobsList::JobEntry* JobsList::getJobById(int jobId) {
     if (it != jobs.end()) {
         return &it->second;
     }
-
-    // Clean up the memory allocated by _parseCommandLine
-    for (int i = 0; i < num_args; i++) {
-        free(args[i]);
-    }
-
+    return nullptr;
 }
 
 AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
@@ -506,5 +505,71 @@ void UnAliasCommand::execute() {
     }
 }
 
+UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {};
 
 
+bool UnSetEnvCommand::isEnvExistsInProc(const std::string& var_name) {
+    pid_t pid = getpid();
+    std::string proc_path = "/proc/" + std::to_string(pid) + "/environ";
+    
+    std::ifstream env_file(proc_path, std::ios::binary);
+    if (!env_file.is_open()) {
+        return false; 
+    }
+
+    std::string entry;
+    while (std::getline(env_file, entry, '\0')) {
+        size_t eq_pos = entry.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string current_var = entry.substr(0, eq_pos);
+            if (current_var == var_name) {
+                return true; 
+            }
+        }
+    }
+    return false;
+}
+
+void UnSetEnvCommand::removeEnvFromGlobalArray(const std::string& var_name) {
+    if (__environ == nullptr) return;
+
+    int i = 0;
+    while (__environ[i] != nullptr) {
+        std::string entry(__environ[i]);
+        size_t eq_pos = entry.find('=');
+        std::string current_var = entry.substr(0, eq_pos);
+
+        if (current_var == var_name) {
+            int j = i;
+            while (__environ[j] != nullptr) {
+                __environ[j] = __environ[j + 1];
+                j++;
+            }
+        } else {
+            i++;
+        }
+    }
+}
+
+void UnSetEnvCommand::execute() {
+    char* args[COMMAND_MAX_ARGS];
+    int num_args = _parseCommandLine(cmd_line.c_str(), args);
+
+    if (num_args == 1) {
+        std::cerr << "smash error: unsetenv: not enough arguments\n";
+    } else {
+        for (int i = 1; i < num_args; ++i) {
+            std::string var_to_remove = args[i];
+
+            if (!isEnvExistsInProc(var_to_remove)) {
+                std::cerr << "smash error: unsetenv: " << var_to_remove << " does not exist\n";
+                break; 
+            }
+            removeEnvFromGlobalArray(var_to_remove);
+        }
+    }
+
+    for (int i = 0; i < num_args; i++) {
+        free(args[i]);
+    }
+}
