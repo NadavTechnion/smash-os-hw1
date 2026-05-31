@@ -4,9 +4,10 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <fcntl.h>
+
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
-#include <map>
 class Command {
     // TODO: Add your data members
 protected:
@@ -52,7 +53,6 @@ public:
 };
 
 class RedirectionCommand : public Command {
-    // TODO: Add your data members
 public:
     explicit RedirectionCommand(const char *cmd_line);
 

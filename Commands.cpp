@@ -114,6 +114,10 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         std::string fullNewCmd = aliasContent + restOfCommand;
         return CreateCommand(fullNewCmd.c_str());
     }
+    // check if output redirecting is needed
+    if (cmd_s.find(">") != string::npos) {
+        return new RedirectionCommand(cmd_line);
+    }
 
     if (firstWord.compare("chprompt") == 0) {
         return new ChpromptCommand(cmd_line);
@@ -572,4 +576,67 @@ void UnSetEnvCommand::execute() {
     for (int i = 0; i < num_args; i++) {
         free(args[i]);
     }
+}
+
+RedirectionCommand::RedirectionCommand(const char *cmd_line) : Command(cmd_line) {}
+
+void RedirectionCommand::execute() {
+    string cmd_s = _trim(string(cmd_line));
+    bool is_append = false;
+    
+    size_t pos = cmd_s.find(">>");
+    if (pos != string::npos) {
+        is_append = true;
+    } else {
+        pos = cmd_s.find(">");
+    }
+
+    if (pos == string::npos) return;
+
+    string command_str = _trim(cmd_s.substr(0, pos));
+    string file_str = _trim(cmd_s.substr(pos + (is_append ? 2 : 1)));
+
+    if (!file_str.empty() && file_str.back() == '&') {
+        file_str.pop_back();
+        file_str = _trim(file_str);
+    }
+
+    int fd;
+    if (is_append) {
+        fd = open(file_str.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0666);
+    } else {
+        fd = open(file_str.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    }
+
+    if (fd == -1) {
+        perror("smash error: open failed");
+        return;
+    }
+
+    int stdout_fd = dup(1);
+    if (stdout_fd == -1) {
+        perror("smash error: dup failed");
+        close(fd);
+        return;
+    }
+
+    if (dup2(fd, 1) == -1) {
+        perror("smash error: dup2 failed");
+        close(fd);
+        close(stdout_fd);
+        return;
+    }
+
+    SmallShell& smash = SmallShell::getInstance();
+    Command* inner_cmd = smash.CreateCommand(command_str.c_str());
+    if (inner_cmd) {
+        inner_cmd->execute();
+        delete inner_cmd;
+    }
+
+    close(fd);
+    if (dup2(stdout_fd, 1) == -1) {
+        perror("smash error: dup2 failed");
+    }
+    close(stdout_fd);
 }
