@@ -8,7 +8,6 @@
 #include "Commands.h"
 #include <cctype>
 using namespace std;
-#include <fstream>
 extern char **environ;
 #include <unistd.h>
 
@@ -96,15 +95,11 @@ SmallShell::~SmallShell() {
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
 Command *SmallShell::CreateCommand(const char *cmd_line) {
-    // מנקים רווחים מיותרים מההתחלה והסוף
     string cmd_s = _trim(string(cmd_line));
     
-    // אם שורת הפקודה ריקה, אין מה לעשות
     if (cmd_s.empty()) {
         return nullptr;
     }
-
-
 
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n\r\t"));
     
@@ -114,6 +109,12 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         std::string fullNewCmd = aliasContent + restOfCommand;
         return CreateCommand(fullNewCmd.c_str());
     }
+    // check if pipe is needed
+    if (cmd_s.find("|") != string::npos) {
+        return new PipeCommand(cmd_line);
+    }
+
+
     // check if output redirecting is needed
     if (cmd_s.find(">") != string::npos) {
         return new RedirectionCommand(cmd_line);
@@ -429,20 +430,20 @@ JobsList::JobEntry* JobsList::getJobById(int jobId) {
     return nullptr;
 }
 
-AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
-
+    
 void AliasCommand::execute() {
     SmallShell& smash = SmallShell::getInstance();
     string cmd_s = _trim(string(cmd_line));
 
     // print all aliases
     if (cmd_s == "alias") {
-        for (const auto& pair : smash.getAliases()) {
-            cout << pair.first << "='" << pair.second << "'" << endl;
+        const auto& aliasList = smash.getAliases();
+        for (const auto& alias : aliasList) {
+            cout << alias.first << "='" << alias.second << "'" << endl;
         }
         return;
     }
-
+    
     // add a new alias
     size_t equal_sign = cmd_s.find('=');
     size_t first_quote = cmd_s.find('\'', equal_sign);
@@ -456,6 +457,12 @@ void AliasCommand::execute() {
 
     // parse
     string name = _trim(cmd_s.substr(5, equal_sign - 5)); 
+    
+    if (name.empty()) {
+        cerr << "smash error: alias: invalid alias format" << endl;
+        return;
+    }
+
     string command = cmd_s.substr(first_quote + 1, last_quote - first_quote - 1);
     //check for legal name
     for (char c : name) {
@@ -516,13 +523,34 @@ bool UnSetEnvCommand::isEnvExistsInProc(const std::string& var_name) {
     pid_t pid = getpid();
     std::string proc_path = "/proc/" + std::to_string(pid) + "/environ";
     
-    std::ifstream env_file(proc_path, std::ios::binary);
-    if (!env_file.is_open()) {
-        return false; 
+    int fd = open(proc_path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        perror("smash error: open failed");
+        return;
     }
 
-    std::string entry;
-    while (std::getline(env_file, entry, '\0')) {
+    std::vector<char> buffer(4096); 
+    ssize_t bytes_read;
+    std::string env_data;
+
+    while ((bytes_read = read(fd, buffer.data(), buffer.size())) > 0) {
+        env_data.append(buffer.data(), bytes_read);
+    }
+
+    if (bytes_read == -1) {
+        perror("smash error: read failed");
+    }
+
+    close(fd);
+
+    size_t start = 0;
+    while (start < env_data.size()) {
+        size_t null_pos = env_data.find('\0', start);
+        if (null_pos == std::string::npos) {
+            break; 
+        }
+        std::string entry = env_data.substr(start, null_pos - start);
+        
         size_t eq_pos = entry.find('=');
         if (eq_pos != std::string::npos) {
             std::string current_var = entry.substr(0, eq_pos);
@@ -530,7 +558,9 @@ bool UnSetEnvCommand::isEnvExistsInProc(const std::string& var_name) {
                 return true; 
             }
         }
+        start = null_pos + 1;
     }
+    
     return false;
 }
 
@@ -581,6 +611,7 @@ void UnSetEnvCommand::execute() {
 RedirectionCommand::RedirectionCommand(const char *cmd_line) : Command(cmd_line) {}
 
 void RedirectionCommand::execute() {
+
     string cmd_s = _trim(string(cmd_line));
     bool is_append = false;
     
@@ -639,4 +670,100 @@ void RedirectionCommand::execute() {
         perror("smash error: dup2 failed");
     }
     close(stdout_fd);
+}
+
+
+PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {}
+
+void PipeCommand::execute() {
+    string cmd_s = _trim(string(cmd_line));
+    bool is_stderr = false;
+    
+    size_t pos = cmd_s.find("|&");
+    if (pos != string::npos) {
+        is_stderr = true;
+    } else {
+        pos = cmd_s.find("|");
+    }
+
+    if (pos == string::npos) return;
+
+    string cmd1_str = _trim(cmd_s.substr(0, pos));
+    string cmd2_str = _trim(cmd_s.substr(pos + (is_stderr ? 2 : 1)));
+
+    if (!cmd2_str.empty() && cmd2_str.back() == '&') {
+        cmd2_str.pop_back();
+        cmd2_str = _trim(cmd2_str);
+    }
+
+    int fd[2];
+    if (pipe(fd) == -1) {
+        perror("smash error: pipe failed");
+        return;
+    }
+
+    SmallShell& smash = SmallShell::getInstance();
+
+    pid_t pid1 = fork();
+    if (pid1 == -1) {
+        perror("smash error: fork failed");
+        close(fd[0]);
+        close(fd[1]);
+        return;
+    }
+
+    if (pid1 == 0) {
+        setpgrp();
+        //1 = stdout, 2 = stderr
+        int channel = is_stderr ? 2 : 1;
+        
+        if (dup2(fd[1], channel) == -1) {
+            perror("smash error: dup2 failed");
+            exit(1);
+        }
+        
+        close(fd[0]);
+        close(fd[1]);
+
+        Command* cmd1 = smash.CreateCommand(cmd1_str.c_str());
+        if (cmd1) {
+            cmd1->execute();
+            delete cmd1;
+        }
+        exit(0); 
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == -1) {
+        perror("smash error: fork failed");
+        close(fd[0]);
+        close(fd[1]);
+        return;
+    }
+
+    if (pid2 == 0) {
+        setpgrp();
+
+        if (dup2(fd[0], 0) == -1) {
+            perror("smash error: dup2 failed");
+            exit(1);
+        }
+        
+        close(fd[0]);
+        close(fd[1]);
+
+        Command* cmd2 = smash.CreateCommand(cmd2_str.c_str());
+        
+        if (cmd2) {
+            cmd2->execute();
+            delete cmd2;
+        }
+        exit(0);
+    }
+
+    close(fd[0]);
+    close(fd[1]);
+
+    waitpid(pid1, nullptr, 0);
+    waitpid(pid2, nullptr, 0);
 }

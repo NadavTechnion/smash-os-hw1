@@ -63,7 +63,6 @@ public:
 };
 
 class PipeCommand : public Command {
-    // TODO: Add your data members
 public:
     PipeCommand(const char *cmd_line);
 
@@ -292,7 +291,7 @@ private:
     JobsList jobManager;
     std::string name;
     std::string lastPwd;
-    std::map<std::string, std::string> aliases;
+    std::vector<std::pair<std::string, std::string>> aliases;
     SmallShell();
 
 public:
@@ -305,11 +304,42 @@ public:
     void setName(const std::string n){
         name = n;
     }
-    void addAlias(const std::string& name, const std::string& cmd) { aliases[name] = cmd; }
-    void removeAlias(const std::string& name) { aliases.erase(name); }
-    bool isAliasExists(const std::string& name) { return aliases.find(name) != aliases.end(); }
-    std::string getAliasCommand(const std::string& name) { return aliases[name]; }
-    const std::map<std::string, std::string>& getAliases() const { return aliases; }
+    // ToDo: move implementaion of alias helper funcs to cpp
+    void addAlias(const std::string& name, const std::string& cmd) {
+        aliases.push_back({name, cmd});
+    }
+
+    void removeAlias(const std::string& name) {
+        for (auto it = aliases.begin(); it != aliases.end(); ++it) {
+            if (it->first == name) {
+                aliases.erase(it);
+                return;
+            }
+        }
+    }
+
+    bool isAliasExists(const std::string& name) const {
+        for (const auto& alias : aliases) {
+            if (alias.first == name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::string getAliasCommand(const std::string& name) const {
+        for (const auto& alias : aliases) {
+            if (alias.first == name) {
+                return alias.second;
+            }
+        }
+        return ""; 
+    }
+
+    const std::vector<std::pair<std::string, std::string>>& getAliases() const { 
+        return aliases; 
+    }
+
     SmallShell(SmallShell const &) = delete; // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance() // make SmallShell singleton
