@@ -4,6 +4,7 @@
 #include <vector>
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+#include <map>
 class Command {
     // TODO: Add your data members
 protected:
@@ -111,6 +112,7 @@ class ChpromptCommand : public BuiltInCommand{
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
+    public:
     ChangeDirCommand(const char *cmd_line);
     virtual ~ChangeDirCommand() {
     }
@@ -272,7 +274,7 @@ private:
     JobsList jobs;
     std::string name;
     std::string lastPwd;
-
+    std::map<std::string, std::string> aliases;
     SmallShell();
 
 public:
@@ -285,8 +287,11 @@ public:
     void setName(const std::string n){
         name = n;
     }
-
-
+    void addAlias(const std::string& name, const std::string& cmd) { aliases[name] = cmd; }
+    void removeAlias(const std::string& name) { aliases.erase(name); }
+    bool isAliasExists(const std::string& name) { return aliases.find(name) != aliases.end(); }
+    std::string getAliasCommand(const std::string& name) { return aliases[name]; }
+    const std::map<std::string, std::string>& getAliases() const { return aliases; }
     SmallShell(SmallShell const &) = delete; // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance() // make SmallShell singleton

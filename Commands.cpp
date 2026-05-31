@@ -8,6 +8,9 @@
 #include "Commands.h"
 #include <cctype>
 using namespace std;
+#include <fstream>
+extern char **environ;
+
 
 const std::string WHITESPACE = " \n\r\t\f\v";
 
@@ -84,36 +87,59 @@ SmallShell::~SmallShell() {
     // TODO: add your implementation
 }
 
+
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
 Command *SmallShell::CreateCommand(const char *cmd_line) {
-    // For example:
-    
+    // מנקים רווחים מיותרים מההתחלה והסוף
     string cmd_s = _trim(string(cmd_line));
-    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
     
+    // אם שורת הפקודה ריקה, אין מה לעשות
+    if (cmd_s.empty()) {
+        return nullptr;
+    }
+
+
+
+    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n\r\t"));
+    
+    if (isAliasExists(firstWord)) {
+        std::string aliasContent = getAliasCommand(firstWord);
+        std::string restOfCommand = cmd_s.substr(firstWord.length());
+        std::string fullNewCmd = aliasContent + restOfCommand;
+        return CreateCommand(fullNewCmd.c_str());
+    }
+
     if (firstWord.compare("chprompt") == 0) {
-      return new ChpromptCommand(cmd_line);
+        return new ChpromptCommand(cmd_line);
     }
     else if (firstWord.compare("showpid") == 0) {
-      return new ShowPidCommand(cmd_line);
+        return new ShowPidCommand(cmd_line);
     }
     else if (firstWord.compare("pwd") == 0) {
-      return new GetCurrDirCommand(cmd_line);
+        return new GetCurrDirCommand(cmd_line);
     }
     else if (firstWord.compare("cd") == 0) {
-      return new ChangeDirCommand(cmd_line);
+        return new ChangeDirCommand(cmd_line);
     }
-    // else {
-    //   return new ExternalCommand(cmd_line);
-    // }
-    
+    else if (firstWord.compare("alias") == 0) {
+        return new AliasCommand(cmd_line);
+    }
+    else if (firstWord.compare("unalias") == 0) {
+        return new UnAliasCommand(cmd_line);
+    }
+    else if (firstWord.compare("unsetenv") == 0) {
+        return new UnSetEnvCommand(cmd_line);
+    }
+    else {
+   
+        // return new ExternalCommand(cmd_line); // נפתח את זה כשנגיע לשלב הזה!
+        
+        return nullptr; // בינתיים מחזירים null עד שניישם את המחלקה
+    }
+    }
 
-
-
-    return nullptr;
-}
 
 Command::Command(const char *cmd_line) : cmd_line(_rtrim(std::string(cmd_line))) {}
 Command::~Command() {}
@@ -277,4 +303,88 @@ void ChpromptCommand::execute() {
     for (int i = 0; i < num_args; i++) {
         free(args[i]);
     }
+
 }
+
+AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void AliasCommand::execute() {
+    SmallShell& smash = SmallShell::getInstance();
+    string cmd_s = _trim(string(cmd_line));
+
+    // print all aliases
+    if (cmd_s == "alias") {
+        for (const auto& pair : smash.getAliases()) {
+            cout << pair.first << "='" << pair.second << "'" << endl;
+        }
+        return;
+    }
+
+    // add a new alias
+    size_t equal_sign = cmd_s.find('=');
+    size_t first_quote = cmd_s.find('\'', equal_sign);
+    size_t last_quote = cmd_s.find_last_of('\'');
+
+    //check syntax 
+    if (equal_sign == string::npos || first_quote == string::npos || last_quote == string::npos || first_quote == last_quote) {
+        cerr << "smash error: alias: invalid alias format" << endl;
+        return;
+    }
+
+    // parse
+    string name = _trim(cmd_s.substr(5, equal_sign - 5)); 
+    string command = cmd_s.substr(first_quote + 1, last_quote - first_quote - 1);
+    //check for legal name
+    for (char c : name) {
+        if (!isalnum(c) && c != '_') {
+            cerr << "smash error: alias: invalid alias format" << endl;
+            return;
+        }
+    }
+
+    bool is_existing_alias = smash.isAliasExists(name);
+    
+    Command* testCmd = smash.CreateCommand(name.c_str());
+    bool is_reserved_cmd = (dynamic_cast<BuiltInCommand*>(testCmd) != nullptr);
+    
+    if (testCmd != nullptr) {
+        delete testCmd;
+    }
+
+    if (is_existing_alias || is_reserved_cmd) {
+        cerr << "smash error: alias: " << name << " already exists or is a reserved command" << endl;
+        return;
+    }
+
+    smash.addAlias(name, command);
+    }
+
+UnAliasCommand::UnAliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void UnAliasCommand::execute() {
+    char* args[COMMAND_MAX_ARGS];
+    int num_args = _parseCommandLine(cmd_line.c_str(), args);
+    SmallShell& smash = SmallShell::getInstance();
+
+    if (num_args == 1) {
+        std::cerr << "smash error: unalias: not enough arguments\n";
+    } else {
+        for (int i = 1; i < num_args; ++i) {
+            std::string alias_name = args[i];
+            
+            if (!smash.isAliasExists(alias_name)) {
+                std::cerr << "smash error: unalias: " << alias_name << " alias does not exist\n";
+                break;
+            }
+
+            smash.removeAlias(alias_name);
+        }
+    }
+
+    for (int i = 0; i < num_args; i++) {
+        free(args[i]);
+    }
+}
+
+
+
