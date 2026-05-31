@@ -2,6 +2,8 @@
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
 #include <vector>
+#include <string>
+#include <map>
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #include <map>
@@ -37,6 +39,7 @@ public:
 
 class ExternalCommand : public Command {
     int p_id;
+
 public:
     ExternalCommand(const char *cmd_line,int p_id);
     int getPid() const {
@@ -143,8 +146,10 @@ public:
 class JobsList;
 
 class QuitCommand : public BuiltInCommand {
+
     // TODO: Add your data members public:
-    QuitCommand(const char *cmd_line, JobsList *jobs);
+public:
+    QuitCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {};
 
     virtual ~QuitCommand() {
     }
@@ -153,10 +158,14 @@ class QuitCommand : public BuiltInCommand {
 };
 class JobsList {
 public:
+    void printJobs();
+
+
+
     class JobEntry {
-    int job_id;
-    int p_id;
-    std::string cmd_line;
+        int job_id;
+        int p_id;
+        std::string cmd_line;
     bool is_stopped;
     public:
         JobEntry(int job_id , int p_id,std::string cmd_line , bool is_stopped):
@@ -166,9 +175,11 @@ public:
         int getPid() const { return p_id; }
         std::string getCmdLine() const { return cmd_line; }
         bool getIsStopped() const { return is_stopped; }
+        std::string info();
+        bool find();
     };
 private:
-    std::vector<JobEntry> jobs;
+    std::map<int, JobEntry> jobs;
 
     // TODO: Add your data members
 public:
@@ -186,9 +197,17 @@ public:
 
     JobEntry *getJobById(int jobId);
 
+    JobEntry *getFirstJob();
+
+    JobEntry *getLastJob();
+
+    void printAndKillAllJobs();
+
+    int size();
+
     void removeJobById(int jobId);
 
-    JobEntry *getLastJob(int *lastJobId);
+    JobEntry *getfirstJob(int *lastJobId);
 
     JobEntry *getLastStoppedJob(int *jobId);
 
@@ -196,9 +215,8 @@ public:
 };
 
 class JobsCommand : public BuiltInCommand {
-    // TODO: Add your data members
 public:
-    JobsCommand(const char *cmd_line, JobsList *jobs);
+    JobsCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {};
 
     virtual ~JobsCommand() {
     }
@@ -207,9 +225,8 @@ public:
 };
 
 class KillCommand : public BuiltInCommand {
-    // TODO: Add your data members
 public:
-    KillCommand(const char *cmd_line, JobsList *jobs);
+    KillCommand(const char *cmd_line);
 
     virtual ~KillCommand() {
     }
@@ -218,9 +235,8 @@ public:
 };
 
 class ForegroundCommand : public BuiltInCommand {
-    // TODO: Add your data members
 public:
-    ForegroundCommand(const char *cmd_line, JobsList *jobs);
+    ForegroundCommand(const char *cmd_line);
 
     virtual ~ForegroundCommand() {
     }
@@ -271,7 +287,7 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
-    JobsList jobs;
+    JobsList jobManager;
     std::string name;
     std::string lastPwd;
     std::map<std::string, std::string> aliases;
@@ -283,7 +299,7 @@ public:
     std::string getName(){
         return name;
     }
-
+    JobsList& getJobManager() { return jobManager; }
     void setName(const std::string n){
         name = n;
     }
